@@ -1,0 +1,43 @@
+name: deepchat
+description: "DeepChat：支持自定义 API 与多模型切换的 DeepSeek 风格移动端聊天应用。"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.5+1
+  http: ^1.6.0
+  shared_preferences: ^2.5.6
+  sqflite: ^2.4.6
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  file_selector: ^1.1.0
+  url_launcher: ^6.3.3
+  record: ^7.2.0
+  flutter_tts: ^4.2.5
+  share_plus: ^13.3.1
+  archive: ^4.7.1
+  intl: ^0.20.3
+  flutter_math_fork: ^0.7.4
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
+  flutter_markdown_plus: ^1.0.12
+  markdown: ^7.3.1
+  http_parser: ^4.1.2
+  cross_file: ^0.3.5+5
+  collection: ^1.19.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

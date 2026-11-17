@@ -9,3 +9,7 @@ build/
 .env.*
 !.env.example
 tmp/
+*.jks
+*.keystore
+key.properties
+*.apk
