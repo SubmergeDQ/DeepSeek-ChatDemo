@@ -517,6 +517,18 @@ class ChatController extends ChangeNotifier {
     await repository.saveMessage(conversation.id, messageIndex, message);
   }
 
+  Future<void> setFeedback(int messageIndex, int value) async {
+    final conversation = active;
+    if (conversation == null) return;
+    if (messageIndex < 0 || messageIndex >= conversation.messages.length) return;
+    final message = conversation.messages[messageIndex];
+    final variant = message.variant;
+    if (variant == null) return;
+    variant.feedback = variant.feedback == value ? 0 : value;
+    notifyListeners();
+    await repository.saveMessage(conversation.id, messageIndex, message);
+  }
+
   List<ChatTurn> _historyBefore(Conversation conversation, int userIndex) {
     final result = <ChatTurn>[];
     for (var i = 0; i < userIndex; i++) {
@@ -631,6 +643,9 @@ class ChatController extends ChangeNotifier {
             break;
           case SearchStatusEvent():
             searchPhase = event.phase.name;
+            if (event.phase == SearchPhase.reading) {
+              variant.didBrowsePage = true;
+            }
             break;
           case TitleEvent():
             if (conversation.titleAuto) {

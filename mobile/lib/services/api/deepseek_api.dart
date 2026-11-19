@@ -116,6 +116,8 @@ class DeepSeekApi extends ChatApi {
                     title: item['title'] as String?,
                     siteName: item['site_name'] as String?,
                     snippet: item['snippet'] as String?,
+                    publishedAt: item['published_at'] as String?,
+                    siteIcon: item['site_icon'] as String?,
                   ));
                 }
               }

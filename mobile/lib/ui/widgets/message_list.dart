@@ -93,7 +93,7 @@ class _MessageListState extends State<MessageList> {
     final controller = widget.controller;
     final conversation = widget.conversation;
     final settings = context.watch<SettingsStore>();
-    final speech = context.read<SpeechService>();
+    final speech = context.watch<SpeechService>();
     final messages = conversation.messages;
     final streaming = controller.isActiveStreaming;
     if (streaming && _atBottom) {
@@ -142,6 +142,7 @@ class _MessageListState extends State<MessageList> {
               onShare: () => _share(context, message, variant),
               onContinue: () => _continue(context, index),
               onVariant: (delta) => controller.selectVariant(index, delta),
+              onFeedback: (value) => controller.setFeedback(index, value),
             );
           },
         ),
@@ -202,19 +203,13 @@ class _MessageListState extends State<MessageList> {
     }
     final content = variant?.content ?? '';
     if (content.trim().isEmpty) return;
-    speech.onSpeakingChanged = (_) {
-      if (mounted) setState(() {});
-    };
     await speech.speak(
       stripMarkdown(content),
       messageId: message.id,
       zh: settings.zh,
       rate: settings.ttsRate,
-      onDone: () {
-        if (mounted) setState(() {});
-      },
+      onDone: () {},
     );
-    if (mounted) setState(() {});
   }
 
   Future<void> _regenerate(BuildContext context, int index) async {

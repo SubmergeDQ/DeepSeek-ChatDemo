@@ -5,7 +5,6 @@ import '../../core/ext.dart';
 import '../../core/theme.dart';
 import '../../data/settings_store.dart';
 import '../../models/models.dart';
-import 'common.dart';
 
 Future<void> showModelPicker(
   BuildContext context, {
@@ -23,6 +22,8 @@ Future<void> showModelPicker(
         builder: (context, setState) {
           final filtered = <(ProviderConfig, List<ModelInfo>)>[];
           for (final provider in settings.providers) {
+            // 未填写 API Key 的服务商不进入模型列表，避免误选后无法使用。
+            if (provider.apiKey.trim().isEmpty) continue;
             final models = provider.models.where((model) {
               if (query.isEmpty) return true;
               final q = query.toLowerCase();
@@ -72,7 +73,40 @@ Future<void> showModelPicker(
                 Divider(height: 0.6, color: context.scheme.outlineVariant),
                 Expanded(
                   child: filtered.isEmpty
-                      ? EmptyState(icon: Icons.memory_rounded, title: l10n.noModels)
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(28),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.key_off_rounded,
+                                  size: 42,
+                                  color: context.scheme.onSurface.withValues(alpha: 0.22),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  l10n.noApiKeyForProvider,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    color: context.scheme.onSurface.withValues(alpha: 0.65),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (onManage != null)
+                                  FilledButton.icon(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      onManage();
+                                    },
+                                    icon: const Icon(Icons.settings_outlined, size: 17),
+                                    label: Text(l10n.goSettings),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        )
                       : ListView(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
                           children: [

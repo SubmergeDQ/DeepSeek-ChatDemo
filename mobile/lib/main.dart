@@ -62,7 +62,7 @@ class DeepChatApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<SettingsStore>.value(value: settings),
         ChangeNotifierProvider<ChatController>.value(value: chat),
-        Provider<SpeechService>.value(value: speech),
+        ChangeNotifierProvider<SpeechService>.value(value: speech),
         Provider<AttachmentService>.value(value: attachmentService),
         Provider<BackupService>.value(value: backupService),
       ],

@@ -75,30 +75,31 @@ class _MarkdownViewState extends State<MarkdownView> {
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: TextStyle(
         fontSize: 16,
-        height: 1.72,
+        height: 1.75,
         color: theme.colorScheme.onSurface,
       ),
       h1: TextStyle(
         fontSize: 24,
         fontWeight: FontWeight.w700,
-        height: 1.4,
+        height: 1.42,
         color: theme.colorScheme.onSurface,
       ),
       h2: TextStyle(
-        fontSize: 21,
+        fontSize: 22,
         fontWeight: FontWeight.w700,
-        height: 1.4,
-        color: theme.colorScheme.onSurface,
-      ),
-      h3: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
         height: 1.45,
         color: theme.colorScheme.onSurface,
       ),
+      h3: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        height: 1.5,
+        color: theme.colorScheme.onSurface,
+      ),
       h4: TextStyle(
-        fontSize: 16.5,
+        fontSize: 16,
         fontWeight: FontWeight.w600,
+        height: 1.75,
         color: theme.colorScheme.onSurface,
       ),
       strong: const TextStyle(fontWeight: FontWeight.w700),
@@ -109,9 +110,9 @@ class _MarkdownViewState extends State<MarkdownView> {
       ),
       code: TextStyle(
         fontFamily: 'monospace',
-        fontSize: 13.5,
-        backgroundColor: isDark ? const Color(0xFF2A2C34) : const Color(0xFFF0F2F7),
-        color: isDark ? const Color(0xFFE6E8EF) : const Color(0xFF24262E),
+        fontSize: 14,
+        backgroundColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF1F3F5),
+        color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF0F1115),
       ),
       blockquote: TextStyle(
         color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
@@ -134,13 +135,15 @@ class _MarkdownViewState extends State<MarkdownView> {
         color: theme.colorScheme.onSurface,
       ),
       tableHead: TextStyle(
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
         color: theme.colorScheme.onSurface,
-        fontSize: 14.5,
+        fontSize: 15,
+        height: 1.67,
       ),
       tableBody: TextStyle(
         color: theme.colorScheme.onSurface,
-        fontSize: 14.5,
+        fontSize: 15,
+        height: 1.67,
       ),
       tableBorder: TableBorder.all(
         color: theme.colorScheme.outlineVariant,
@@ -227,7 +230,7 @@ class CodeBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final background = isDark ? const Color(0xFF17181D) : const Color(0xFFF8F9FC);
+    final background = isDark ? const Color(0xFF1B1B1C) : const Color(0xFFF9FAFB);
     final languageLabel = language.isEmpty ? 'text' : language;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),

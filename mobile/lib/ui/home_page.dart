@@ -5,8 +5,10 @@ import 'package:share_plus/share_plus.dart';
 
 import '../core/ext.dart';
 import '../core/theme.dart';
+import '../core/utils.dart';
 import '../data/settings_store.dart';
 import '../models/models.dart';
+import '../services/speech/speech_service.dart';
 import '../state/chat_controller.dart';
 import 'pages/settings_page.dart';
 import 'widgets/chat_input.dart';
@@ -37,6 +39,16 @@ class _HomePageState extends State<HomePage> {
     final model = settings.activeModel;
     final hasMessages = messages.isNotEmpty;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasKey = provider?.apiKey.trim().isNotEmpty ?? false;
+    final speech = context.watch<SpeechService>();
+    ChatMessage? lastReply;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final message = messages[i];
+      if (!message.isUser && (message.variant?.content.trim().isNotEmpty ?? false)) {
+        lastReply = message;
+        break;
+      }
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -49,6 +61,8 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         key: _scaffoldKey,
         drawer: SessionDrawer(onOpenSettings: _openSettings),
+        drawerEnableOpenDragGesture: true,
+        drawerEdgeDragWidth: 48,
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -56,24 +70,38 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 children: [
                   _TopBar(
-                    modelName: model?.name ?? l10n.selectModel,
-                    providerName: provider?.name ?? '',
+                    title: conversation?.displayTitle ?? l10n.newChatTitle,
+                    canReadAloud: lastReply != null && !controller.isStreaming,
+                    speaking: lastReply != null && speech.speakingId == lastReply.id,
                     onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                    onModel: () => showModelPicker(context, onManage: _openSettings),
+                    onTitleTap: hasMessages ? () => _showMoreMenu(context) : null,
+                    onReadAloud: lastReply == null || controller.isStreaming
+                        ? null
+                        : () => _toggleReadAloud(lastReply!),
                     onNewChat: _newChat,
-                    onMore: () => _showMoreMenu(context),
-                    hasConversation: hasMessages,
                   ),
                   Expanded(
-                    child: hasMessages && conversation != null
-                        ? MessageList(
-                            controller: controller,
-                            conversation: conversation,
-                          )
-                        : WelcomeView(
-                            modelName: model?.name ?? l10n.selectModel,
-                            onSuggestion: _sendSuggestion,
-                          ),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragEnd: (details) {
+                        final velocity = details.primaryVelocity ?? 0;
+                        if (velocity > 250) {
+                          _scaffoldKey.currentState?.openDrawer();
+                        }
+                      },
+                      child: hasMessages && conversation != null
+                          ? MessageList(
+                              controller: controller,
+                              conversation: conversation,
+                            )
+                          : WelcomeView(
+                              modelName: hasKey ? (model?.name ?? '') : '',
+                              onModelTap: () => showModelPicker(
+                                context,
+                                onManage: _openSettings,
+                              ),
+                            ),
+                    ),
                   ),
                   if (conversation != null)
                     ChatInput(
@@ -99,23 +127,28 @@ class _HomePageState extends State<HomePage> {
     controller.newConversation();
   }
 
+  Future<void> _toggleReadAloud(ChatMessage message) async {
+    final speech = context.read<SpeechService>();
+    final settings = context.read<SettingsStore>();
+    if (speech.speakingId == message.id) {
+      await speech.stopSpeaking();
+      return;
+    }
+    final content = message.variant?.content ?? '';
+    if (content.trim().isEmpty) return;
+    await speech.speak(
+      stripMarkdown(content),
+      messageId: message.id,
+      zh: settings.zh,
+      rate: settings.ttsRate,
+      onDone: () {},
+    );
+  }
+
   Future<void> _openSettings() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
     );
-  }
-
-  Future<void> _sendSuggestion(String text) async {
-    final controller = context.read<ChatController>();
-    try {
-      await controller.send(text);
-    } on ChatException catch (error) {
-      if (!mounted) return;
-      showToast(context, error.message);
-    } catch (error) {
-      if (!mounted) return;
-      showToast(context, error.toString());
-    }
   }
 
   Future<void> _showMoreMenu(BuildContext context) async {
@@ -244,108 +277,69 @@ class _HomePageState extends State<HomePage> {
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
-    required this.modelName,
-    required this.providerName,
+    required this.title,
+    required this.canReadAloud,
+    required this.speaking,
     required this.onMenu,
-    required this.onModel,
+    required this.onTitleTap,
+    required this.onReadAloud,
     required this.onNewChat,
-    required this.onMore,
-    required this.hasConversation,
   });
 
-  final String modelName;
-  final String providerName;
+  final String title;
+  final bool canReadAloud;
+  final bool speaking;
   final VoidCallback onMenu;
-  final VoidCallback onModel;
+  final VoidCallback? onTitleTap;
+  final VoidCallback? onReadAloud;
   final VoidCallback onNewChat;
-  final VoidCallback onMore;
-  final bool hasConversation;
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
+      padding: const EdgeInsets.fromLTRB(4, 4, 6, 2),
       child: Row(
         children: [
           IconButton(
             onPressed: onMenu,
             icon: const Icon(Icons.menu_rounded, size: 23),
-            color: scheme.onSurface.withValues(alpha: 0.65),
+            color: scheme.onSurface.withValues(alpha: 0.75),
             tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
           ),
           Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  onTap: onModel,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.sizeOf(context).width * 0.5,
-                              ),
-                              child: Text(
-                                modelName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: scheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            if (providerName.isNotEmpty)
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: MediaQuery.sizeOf(context).width * 0.5,
-                                ),
-                                child: Text(
-                                  providerName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: scheme.onSurface.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                          color: scheme.onSurface.withValues(alpha: 0.4),
-                        ),
-                      ],
-                    ),
+            child: InkWell(
+              onTap: onTitleTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
             ),
           ),
-          IconButton(
-            onPressed: hasConversation ? onMore : null,
-            icon: const Icon(Icons.more_horiz_rounded, size: 22),
-            color: scheme.onSurface.withValues(alpha: hasConversation ? 0.55 : 0.2),
-          ),
+          if (canReadAloud)
+            IconButton(
+              onPressed: onReadAloud,
+              icon: Icon(
+                speaking ? Icons.stop_circle_outlined : Icons.volume_up_outlined,
+                size: 22,
+              ),
+              color: speaking ? AppTheme.brand : scheme.onSurface.withValues(alpha: 0.7),
+              tooltip: speaking ? context.l10n.stopReading : context.l10n.readAloud,
+            ),
           IconButton(
             onPressed: onNewChat,
-            icon: const Icon(Icons.edit_square, size: 21),
-            color: scheme.onSurface.withValues(alpha: 0.55),
+            icon: const Icon(Icons.add_comment_outlined, size: 22),
+            color: scheme.onSurface.withValues(alpha: 0.7),
             tooltip: context.l10n.newChat,
           ),
         ],

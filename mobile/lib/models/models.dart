@@ -355,18 +355,24 @@ class Citation {
     this.title,
     this.siteName,
     this.snippet,
+    this.publishedAt,
+    this.siteIcon,
   });
 
   final String url;
   final String? title;
   final String? siteName;
   final String? snippet;
+  final String? publishedAt;
+  final String? siteIcon;
 
   Map<String, dynamic> toJson() => {
         'url': url,
         'title': title,
         'siteName': siteName,
         'snippet': snippet,
+        'publishedAt': publishedAt,
+        'siteIcon': siteIcon,
       };
 
   factory Citation.fromJson(Map<String, dynamic> json) => Citation(
@@ -374,6 +380,8 @@ class Citation {
         title: json['title'] as String?,
         siteName: json['siteName'] as String?,
         snippet: json['snippet'] as String?,
+        publishedAt: json['publishedAt'] as String?,
+        siteIcon: json['siteIcon'] as String?,
       );
 }
 
@@ -409,6 +417,8 @@ class MessageVariant {
     this.usage,
     this.reasoningSeconds,
     this.createdAt,
+    this.feedback = 0,
+    this.didBrowsePage = false,
   }) : citations = citations ?? [];
 
   String content;
@@ -423,6 +433,12 @@ class MessageVariant {
   int? reasoningSeconds;
   final int? createdAt;
 
+  /// 0 无反馈，1 有帮助，-1 没帮助。
+  int feedback;
+
+  /// 本轮是否执行过网页阅读。
+  bool didBrowsePage;
+
   Map<String, dynamic> toJson() => {
         'content': content,
         'reasoning': reasoning,
@@ -435,6 +451,8 @@ class MessageVariant {
         'usage': usage?.toJson(),
         'reasoningSeconds': reasoningSeconds,
         'createdAt': createdAt,
+        'feedback': feedback,
+        'didBrowsePage': didBrowsePage,
       };
 
   factory MessageVariant.fromJson(Map<String, dynamic> json) {
@@ -459,6 +477,8 @@ class MessageVariant {
           : null,
       reasoningSeconds: (json['reasoningSeconds'] as num?)?.toInt(),
       createdAt: (json['createdAt'] as num?)?.toInt(),
+      feedback: (json['feedback'] as num?)?.toInt() ?? 0,
+      didBrowsePage: json['didBrowsePage'] as bool? ?? false,
     );
   }
 }

@@ -1,22 +1,34 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 /// 录音 + 系统朗读。
-class SpeechService {
+class SpeechService extends ChangeNotifier {
   final AudioRecorder _recorder = AudioRecorder();
   final FlutterTts _tts = FlutterTts();
 
   bool _recording = false;
   String? _recordPath;
-  String? speakingMessageId;
-  void Function(String? messageId)? onSpeakingChanged;
+  String? _speakingMessageId;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  final ValueNotifier<double> _micLevel = ValueNotifier<double>(0);
 
   bool get isRecording => _recording;
-  String? get speakingId => speakingMessageId;
+  String? get speakingId => _speakingMessageId;
+
+  /// 0~1 的实时麦克风音量，用于录音波形动画。
+  ValueListenable<double> get micLevel => _micLevel;
+
+  void _setSpeaking(String? id) {
+    if (_speakingMessageId == id) return;
+    _speakingMessageId = id;
+    notifyListeners();
+  }
 
   Future<bool> startRecording() async {
     if (_recording) return true;
@@ -34,6 +46,21 @@ class SpeechService {
     );
     _recordPath = path;
     _recording = true;
+    _micLevel.value = 0;
+    try {
+      await _amplitudeSubscription?.cancel();
+      _amplitudeSubscription = _recorder
+          .onAmplitudeChanged(const Duration(milliseconds: 80))
+          .listen(
+        (amplitude) {
+          final db = amplitude.current;
+          _micLevel.value = db >= 0 ? 0.12 : ((db + 60) / 60).clamp(0.0, 1.0);
+        },
+        onError: (_) {},
+      );
+    } catch (_) {
+      // 部分平台不支持实时振幅，保持 0，波形仍会做基础动画。
+    }
     return true;
   }
 
@@ -41,6 +68,9 @@ class SpeechService {
     if (!_recording) return null;
     _recording = false;
     final path = await _recorder.stop();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    _micLevel.value = 0;
     final result = path ?? _recordPath;
     _recordPath = null;
     return result;
@@ -54,6 +84,9 @@ class SpeechService {
     } catch (_) {
       // ignore
     }
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    _micLevel.value = 0;
     final path = _recordPath;
     _recordPath = null;
     if (path != null) {
@@ -72,29 +105,20 @@ class SpeechService {
     required void Function() onDone,
   }) async {
     await stopSpeaking();
-    speakingMessageId = messageId;
-    onSpeakingChanged?.call(messageId);
+    _setSpeaking(messageId);
     try {
       await _tts.setLanguage(zh ? 'zh-CN' : 'en-US');
       await _tts.setSpeechRate(rate.clamp(0.2, 0.9));
       await _tts.setPitch(1.0);
       _tts.setCompletionHandler(() {
-        speakingMessageId = null;
-        onSpeakingChanged?.call(null);
+        _setSpeaking(null);
         onDone();
       });
-      _tts.setCancelHandler(() {
-        speakingMessageId = null;
-        onSpeakingChanged?.call(null);
-      });
-      _tts.setErrorHandler((_) {
-        speakingMessageId = null;
-        onSpeakingChanged?.call(null);
-      });
+      _tts.setCancelHandler(() => _setSpeaking(null));
+      _tts.setErrorHandler((_) => _setSpeaking(null));
       await _tts.speak(text);
     } catch (_) {
-      speakingMessageId = null;
-      onSpeakingChanged?.call(null);
+      _setSpeaking(null);
     }
   }
 
@@ -104,18 +128,16 @@ class SpeechService {
     } catch (_) {
       // ignore
     }
-    if (speakingMessageId != null) {
-      speakingMessageId = null;
-      onSpeakingChanged?.call(null);
-    }
+    _setSpeaking(null);
   }
 
-  Future<void> dispose() async {
-    await stopSpeaking();
-    try {
-      await _recorder.dispose();
-    } catch (_) {
-      // ignore
-    }
+  @override
+  void dispose() {
+    _speakingMessageId = null;
+    _amplitudeSubscription?.cancel();
+    _micLevel.dispose();
+    _tts.stop().catchError((_) {});
+    _recorder.dispose().catchError((_) {});
+    super.dispose();
   }
 }

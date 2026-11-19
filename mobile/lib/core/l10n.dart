@@ -6,9 +6,12 @@ class L10n {
 
   String get appName => 'DeepChat';
   String get newChat => zh ? '新对话' : 'New chat';
+  String get currentModel => zh ? '当前模型' : 'Current model';
+  String get localUser => zh ? '本地用户' : 'Local user';
+  String get aiDisclaimer => zh ? '回答由 AI 生成，仅供参考' : 'AI-generated content, for reference only';
+  String get searchSessions => zh ? '搜索对话内容…' : 'Search chats…';
   String get chat => zh ? '对话' : 'Chat';
   String get settings => zh ? '设置' : 'Settings';
-  String get searchSessions => zh ? '搜索对话' : 'Search chats';
   String get noSessions => zh ? '暂无对话' : 'No chats yet';
   String get today => zh ? '今天' : 'Today';
   String get yesterday => zh ? '昨天' : 'Yesterday';
@@ -25,6 +28,8 @@ class L10n {
   String get share => zh ? '分享' : 'Share';
   String get readAloud => zh ? '朗读' : 'Read aloud';
   String get stopReading => zh ? '停止朗读' : 'Stop reading';
+  String get like => zh ? '有帮助' : 'Helpful';
+  String get dislike => zh ? '没帮助' : 'Not helpful';
   String get edit => zh ? '编辑' : 'Edit';
   String get save => zh ? '保存' : 'Save';
   String get done => zh ? '完成' : 'Done';
@@ -40,13 +45,33 @@ class L10n {
   String get transcribing => zh ? '正在识别…' : 'Transcribing…';
   String get micPermissionDenied => zh ? '需要麦克风权限才能语音输入' : 'Microphone permission is required';
   String get deepThink => zh ? '深度思考' : 'DeepThink';
-  String get webSearch => zh ? '联网搜索' : 'Search';
+  String get webSearch => zh ? '智能搜索' : 'Smart search';
   String get thinking => zh ? '思考中…' : 'Thinking…';
-  String get thoughtFor => zh ? '已深度思考' : 'Thought for';
+  String get thoughtFor => zh ? '已思考' : 'Thought for';
   String get thoughtSeconds => zh ? '秒' : 's';
+  String thoughtForSeconds(int seconds) =>
+      zh ? '已思考（用时 $seconds 秒）' : 'Thought for ${seconds}s';
   String get searchInProgress => zh ? '正在搜索…' : 'Searching…';
   String get readLinkInProgress => zh ? '正在阅读链接…' : 'Reading link…';
   String get sources => zh ? '参考来源' : 'Sources';
+  String get searchResults => zh ? '搜索结果' : 'Search results';
+  String webPagesCount(int count) => zh ? '$count 个网页' : '$count web pages';
+  String get browsePages => zh ? '浏览页面' : 'Browse pages';
+  String get searchedPages => zh ? '搜索到' : 'Found';
+  String get checkForUpdates => zh ? '检查更新' : 'Check for updates';
+  String get currentVersion => zh ? '当前版本' : 'Current version';
+  String get alreadyLatest => zh ? '已是最新版本' : 'Already up to date';
+  String get newVersionFound => zh ? '发现新版本' : 'New version available';
+  String get downloadUpdate => zh ? '下载更新' : 'Download update';
+  String get checkUpdateFailed => zh ? '检查更新失败' : 'Update check failed';
+  String get serviceAgreement => zh ? '服务协议' : 'Terms of service';
+  String get helpFeedback => zh ? '帮助与反馈' : 'Help & feedback';
+  String get openRepository => zh ? '开源仓库' : 'Repository';
+  String get apiAndModels => zh ? '账户与模型' : 'Account & models';
+  String get appSection => zh ? '应用' : 'App';
+  String get voiceSection => zh ? '语音' : 'Voice';
+  String get aboutSection => zh ? '关于' : 'About';
+  String get dataSection => zh ? '数据' : 'Data';
   String get expand => zh ? '展开' : 'Expand';
   String get collapse => zh ? '收起' : 'Collapse';
   String get welcomeTitle => zh ? '有什么可以帮你的？' : 'How can I help you?';
@@ -57,7 +82,7 @@ class L10n {
   String get suggestion2 => zh ? '帮我写一封请假邮件' : 'Draft a leave request email';
   String get suggestion3 => zh ? '用 Python 实现快速排序' : 'Implement quicksort in Python';
   String get suggestion4 => zh ? '制定一周健身计划' : 'Make a one-week workout plan';
-  String get inputHint => zh ? '给 DeepChat 发送消息' : 'Message DeepChat';
+  String get inputHint => zh ? '发消息或按住说话' : 'Message or hold to talk';
   String get apiKeyRequired => zh ? '请先在设置中配置 API Key' : 'Please configure an API key in Settings';
   String get goSettings => zh ? '去设置' : 'Open settings';
   String get provider => zh ? '服务商' : 'Provider';
@@ -121,6 +146,7 @@ class L10n {
   String get copyFailed => zh ? '复制失败' : 'Copy failed';
   String get shareFailed => zh ? '分享失败' : 'Share failed';
   String get voiceFailed => zh ? '语音识别失败' : 'Speech recognition failed';
+  String get voiceTooShort => zh ? '说话时间太短' : 'Recording too short';
   String get attachments => zh ? '附件' : 'Attachments';
   String get attachmentTooLarge => zh ? '文件过大（单个最大 20 MB）' : 'File too large (max 20 MB each)';
   String get unsupportedFile => zh

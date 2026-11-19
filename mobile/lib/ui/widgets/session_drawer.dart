@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_info.dart';
 import '../../core/ext.dart';
 import '../../core/theme.dart';
 import '../../core/utils.dart';
@@ -8,6 +9,7 @@ import '../../data/settings_store.dart';
 import '../../models/models.dart';
 import '../../state/chat_controller.dart';
 import 'common.dart';
+import 'model_picker.dart';
 
 class SessionDrawer extends StatefulWidget {
   const SessionDrawer({super.key, required this.onOpenSettings});
@@ -33,6 +35,7 @@ class _SessionDrawerState extends State<SessionDrawer> {
     final controller = context.watch<ChatController>();
     final settings = context.watch<SettingsStore>();
     final l10n = settings.l10n;
+    final scheme = context.scheme;
     final groups = <String, List<ConversationSummary>>{};
     final now = DateTime.now();
     for (final summary in controller.summaries) {
@@ -42,108 +45,128 @@ class _SessionDrawerState extends State<SessionDrawer> {
       final label = dateGroupLabel(summary.updatedAtTime, now, zh: settings.zh);
       groups.putIfAbsent(label, () => []).add(summary);
     }
-    final scheme = context.scheme;
+    final provider = settings.activeProvider;
+    final model = settings.activeModel;
+    final configured = provider?.apiKey.trim().isNotEmpty ?? false;
+
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.84,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
-      ),
+      shape: const RoundedRectangleBorder(),
       child: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
-              child: Row(
-                children: [
-                  const Logo(size: 30, radius: 9),
-                  const SizedBox(width: 9),
-                  Text(
-                    'DeepChat',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurface,
-                    ),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: TextField(
+                controller: _search,
+                onChanged: (value) => setState(() => _query = value.trim()),
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: l10n.searchSessions,
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 19,
+                    color: scheme.onSurface.withValues(alpha: 0.38),
                   ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      widget.onOpenSettings();
-                    },
-                    icon: const Icon(Icons.settings_outlined, size: 21),
-                    color: scheme.onSurface.withValues(alpha: 0.55),
-                    tooltip: l10n.settings,
+                  filled: true,
+                  fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(22),
+                    borderSide: BorderSide.none,
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: SizedBox(
-                width: double.infinity,
-                height: 42,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    if (controller.isStreaming) {
-                      controller.stop();
-                    }
-                    controller.newConversation();
-                    Navigator.of(context).pop();
-                  },
-                  icon: const Icon(Icons.add_rounded, size: 19),
-                  label: Text(l10n.newChat),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.brand,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(22),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(22),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-              child: TextField(
-                controller: _search,
-                onChanged: (value) => setState(() => _query = value.trim()),
-                style: const TextStyle(fontSize: 13.5),
-                decoration: InputDecoration(
-                  hintText: l10n.searchSessions,
-                  prefixIcon: Icon(Icons.search_rounded, size: 18, color: scheme.onSurface.withValues(alpha: 0.4)),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: scheme.outlineVariant),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => showModelPicker(
+                    context,
+                    onManage: () {
+                      Navigator.of(context).pop();
+                      widget.onOpenSettings();
+                    },
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: scheme.outlineVariant),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.memory_rounded,
+                          size: 15,
+                          color: scheme.onSurface.withValues(alpha: 0.4),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          l10n.currentModel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurface.withValues(alpha: 0.42),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            configured ? (model?.name ?? l10n.selectModel) : l10n.selectModel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: configured
+                                  ? AppTheme.brand
+                                  : scheme.onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 17,
+                          color: scheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
             Expanded(
               child: groups.isEmpty
-                  ? EmptyState(icon: Icons.chat_bubble_outline_rounded, title: l10n.noSessions)
+                  ? EmptyState(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: _query.isEmpty ? l10n.noSessions : l10n.noSessions,
+                    )
                   : ListView(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+                      padding: const EdgeInsets.only(bottom: 8),
                       children: [
                         for (final entry in groups.entries) ...[
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 14, 10, 4),
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
                             child: Text(
                               entry.key,
                               style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurface.withValues(alpha: 0.4),
+                                fontSize: 12.5,
+                                color: scheme.onSurface.withValues(alpha: 0.42),
                               ),
                             ),
                           ),
                           for (final summary in entry.value)
-                            _SessionTile(
+                            _SessionRow(
                               summary: summary,
                               active: controller.active?.id == summary.id,
                               onTap: () async {
@@ -151,24 +174,109 @@ class _SessionDrawerState extends State<SessionDrawer> {
                                 await controller.openConversation(summary.id);
                                 navigator.pop();
                               },
-                              onRename: () => _rename(context, controller, summary),
-                              onDelete: () => _delete(context, controller, summary),
+                              onLongPress: () => _showSessionActions(context, controller, summary),
                             ),
                         ],
                       ],
                     ),
             ),
             Divider(height: 0.6, color: scheme.outlineVariant),
-            ListTile(
-              onTap: () {
-                Navigator.of(context).pop();
-                widget.onOpenSettings();
-              },
-              leading: Icon(Icons.settings_outlined, size: 20, color: scheme.onSurface.withValues(alpha: 0.55)),
-              title: Text(l10n.settings, style: const TextStyle(fontSize: 14.5)),
-              dense: true,
-              trailing: Icon(Icons.chevron_right_rounded, size: 19, color: scheme.onSurface.withValues(alpha: 0.3)),
+            InkWell(
+              onTap: widget.onOpenSettings,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 6, 10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      child: Icon(
+                        Icons.person_outline_rounded,
+                        size: 18,
+                        color: scheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        l10n.localUser,
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: Icon(
+                        Icons.more_horiz_rounded,
+                        size: 20,
+                        color: scheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'settings') {
+                          widget.onOpenSettings();
+                        } else if (value == 'about') {
+                          showAboutDialog(
+                            context: context,
+                            applicationName: 'DeepChat',
+                            applicationVersion: AppInfo.version,
+                            children: [
+                              Text(l10n.disclaimer),
+                            ],
+                          );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'settings',
+                          child: Text(l10n.settings, style: const TextStyle(fontSize: 14)),
+                        ),
+                        PopupMenuItem(
+                          value: 'about',
+                          child: Text(l10n.about, style: const TextStyle(fontSize: 14)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSessionActions(
+    BuildContext context,
+    ChatController controller,
+    ConversationSummary summary,
+  ) async {
+    final l10n = context.l10n;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, size: 20),
+              title: Text(l10n.rename),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _rename(context, controller, summary);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline_rounded, size: 20, color: context.scheme.error),
+              title: Text(
+                l10n.delete,
+                style: TextStyle(color: context.scheme.error),
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _delete(context, controller, summary);
+              },
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -228,87 +336,37 @@ class _SessionDrawerState extends State<SessionDrawer> {
   }
 }
 
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({
+class _SessionRow extends StatelessWidget {
+  const _SessionRow({
     required this.summary,
     required this.active,
     required this.onTap,
-    required this.onRename,
-    required this.onDelete,
+    required this.onLongPress,
   });
 
   final ConversationSummary summary;
   final bool active;
   final VoidCallback onTap;
-  final VoidCallback onRename;
-  final VoidCallback onDelete;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    return Material(
-      color: active ? AppTheme.brand.withValues(alpha: 0.09) : Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 2, 2, 2),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  summary.displayTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: active ? AppTheme.brand : scheme.onSurface.withValues(alpha: 0.82),
-                    fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                  ),
-                ),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'rename') onRename();
-                  if (value == 'delete') onDelete();
-                },
-                icon: Icon(
-                  Icons.more_horiz_rounded,
-                  size: 18,
-                  color: scheme.onSurface.withValues(alpha: 0.35),
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'rename',
-                    height: 40,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit_outlined, size: 17),
-                        const SizedBox(width: 8),
-                        Text(context.l10n.rename, style: const TextStyle(fontSize: 13.5)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    height: 40,
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline_rounded, size: 17, color: scheme.error),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.delete,
-                          style: TextStyle(fontSize: 13.5, color: scheme.error),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        width: double.infinity,
+        color: active ? AppTheme.brand.withValues(alpha: 0.07) : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        child: Text(
+          summary.displayTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15.5,
+            color: active ? AppTheme.brand : scheme.onSurface,
+            fontWeight: active ? FontWeight.w500 : FontWeight.w400,
           ),
         ),
       ),

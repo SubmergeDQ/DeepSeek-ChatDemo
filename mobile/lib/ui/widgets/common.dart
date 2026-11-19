@@ -11,25 +11,42 @@ class Logo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius ?? size * 0.24);
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius ?? size * 0.3),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF6E86FF), AppTheme.brand, Color(0xFF3A55E8)],
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(borderRadius: borderRadius),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: borderRadius,
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+          width: 0.5,
         ),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        'D',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: size * 0.52,
-          fontWeight: FontWeight.w800,
-          height: 1,
+      child: Image.asset(
+        'assets/icon.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF6E86FF), AppTheme.brand, Color(0xFF3A55E8)],
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'D',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size * 0.52,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
+          ),
         ),
       ),
     );

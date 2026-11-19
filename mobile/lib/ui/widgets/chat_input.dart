@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/ext.dart';
@@ -12,6 +14,7 @@ import '../../services/files/attachment_service.dart';
 import '../../services/speech/speech_service.dart';
 import '../../state/chat_controller.dart';
 import 'common.dart';
+import 'voice_wave.dart';
 
 class ChatInput extends StatefulWidget {
   const ChatInput({
@@ -38,7 +41,10 @@ class _ChatInputState extends State<ChatInput> {
   Timer? _recordTimer;
   bool _recording = false;
   bool _transcribing = false;
+  bool _willCancel = false;
+  bool _holdActive = false;
   int _recordSeconds = 0;
+  DateTime? _recordStartedAt;
 
   @override
   void initState() {
@@ -61,6 +67,8 @@ class _ChatInputState extends State<ChatInput> {
       _attachments.clear();
       _recording = false;
       _transcribing = false;
+      _willCancel = false;
+      _holdActive = false;
       _recordSeconds = 0;
     }
   }
@@ -174,42 +182,84 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
-  Future<void> _toggleRecording() async {
-    if (_transcribing) return;
-    if (_recording) {
-      await _finishRecording();
-      return;
-    }
-    final speech = context.read<SpeechService>();
-    final started = await speech.startRecording();
-    if (!started) {
-      if (!mounted) return;
-      showToast(context, context.l10n.micPermissionDenied);
-      return;
-    }
+  Future<void> _startHoldToTalk() async {
+    if (_recording || _transcribing || widget.controller.isStreaming) return;
+    _holdActive = true;
+    _willCancel = false;
     _recordSeconds = 0;
-    _recordTimer?.cancel();
-    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      setState(() => _recordSeconds += 1);
-      if (_recordSeconds >= 120) {
-        _finishRecording();
-      }
-    });
+    HapticFeedback.mediumImpact();
+    _focus.unfocus();
     setState(() {
       _recording = true;
       _transcribing = false;
+    });
+    final speech = context.read<SpeechService>();
+    final started = await speech.startRecording();
+    if (!started) {
+      _holdActive = false;
+      if (!mounted) return;
+      setState(() => _recording = false);
+      showToast(context, context.l10n.micPermissionDenied);
+      return;
+    }
+    if (!_holdActive) {
+      await speech.cancelRecording();
+      if (mounted) setState(() => _recording = false);
+      return;
+    }
+    if (!mounted) return;
+    _recordStartedAt = DateTime.now();
+    _recordTimer?.cancel();
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      _recordSeconds += 1;
+      if (_recordSeconds >= 120) {
+        _endHoldToTalk();
+      }
+    });
+  }
+
+  Future<void> _endHoldToTalk() async {
+    _holdActive = false;
+    final speech = context.read<SpeechService>();
+    if (!_recording && !speech.isRecording) return;
+    if (_willCancel) {
+      await _cancelHoldToTalk();
+      return;
+    }
+    final startedAt = _recordStartedAt;
+    if (startedAt != null &&
+        DateTime.now().difference(startedAt) < const Duration(milliseconds: 500)) {
+      await _cancelHoldToTalk();
+      if (mounted) showToast(context, context.l10n.voiceTooShort);
+      return;
+    }
+    await _finishRecording();
+  }
+
+  Future<void> _cancelHoldToTalk() async {
+    _holdActive = false;
+    _recordTimer?.cancel();
+    _recordStartedAt = null;
+    await context.read<SpeechService>().cancelRecording();
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _willCancel = false;
+      _recordSeconds = 0;
     });
   }
 
   Future<void> _finishRecording() async {
     _recordTimer?.cancel();
+    _recordStartedAt = null;
     final speech = context.read<SpeechService>();
     final path = await speech.stopRecording();
     if (!mounted) return;
     setState(() {
       _recording = false;
       _transcribing = true;
+      _willCancel = false;
     });
     if (path == null) {
       setState(() => _transcribing = false);
@@ -223,6 +273,7 @@ class _ChatInputState extends State<ChatInput> {
         final needsSpace = existing.isNotEmpty && !existing.endsWith(' ');
         _text.text = '$existing${needsSpace ? ' ' : ''}$text';
         _text.selection = TextSelection.collapsed(offset: _text.text.length);
+        _openKeyboard();
       }
     } catch (error) {
       if (!mounted) return;
@@ -240,11 +291,14 @@ class _ChatInputState extends State<ChatInput> {
   }
 
   Future<void> _cancelRecording() async {
+    _holdActive = false;
     _recordTimer?.cancel();
+    _recordStartedAt = null;
     await context.read<SpeechService>().cancelRecording();
     if (!mounted) return;
     setState(() {
       _recording = false;
+      _willCancel = false;
       _recordSeconds = 0;
     });
   }
@@ -266,18 +320,21 @@ class _ChatInputState extends State<ChatInput> {
     final images = _attachments.where((item) => item.isImage).toList();
     final files = _attachments.where((item) => !item.isImage).toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               if (!hasKey)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -316,17 +373,19 @@ class _ChatInputState extends State<ChatInput> {
               Container(
                 decoration: BoxDecoration(
                   color: scheme.surface,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: scheme.outlineVariant, width: 0.8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  boxShadow: Theme.of(context).brightness == Brightness.light
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
-                padding: const EdgeInsets.fromLTRB(12, 10, 10, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -339,51 +398,6 @@ class _ChatInputState extends State<ChatInput> {
                           children: [
                             for (final image in images) _DraftImage(attachment: image, onRemove: () => _remove(image)),
                             for (final file in files) _DraftFile(attachment: file, onRemove: () => _remove(file)),
-                          ],
-                        ),
-                      ),
-                    if (_recording)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Colors.redAccent,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _formatDuration(_recordSeconds),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                l10n.recordingHint,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurface.withValues(alpha: 0.45),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              onPressed: _cancelRecording,
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              color: scheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                            FilledButton(
-                              onPressed: _finishRecording,
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                              ),
-                              child: Text(l10n.done, style: const TextStyle(fontSize: 12)),
-                            ),
                           ],
                         ),
                       ),
@@ -408,37 +422,35 @@ class _ChatInputState extends State<ChatInput> {
                           ],
                         ),
                       ),
-                    TextField(
-                      controller: _text,
-                      focusNode: _focus,
-                      minLines: 1,
-                      maxLines: 6,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      style: const TextStyle(fontSize: 15.5, height: 1.45),
-                      decoration: InputDecoration(
-                        hintText: l10n.inputHint,
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
+                    Stack(
+                      children: [
+                        TextField(
+                          controller: _text,
+                          focusNode: _focus,
+                          minLines: 1,
+                          maxLines: 6,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: const TextStyle(fontSize: 16, height: 1.5),
+                          decoration: InputDecoration(
+                            hintText: l10n.inputHint,
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                            isDense: true,
+                          ),
+                        ),
+                        if (_text.text.trim().isEmpty)
+                          Positioned.fill(
+                            child: _holdToTalkGesture(const SizedBox.expand()),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        IconButton(
-                          onPressed: isStreaming ? null : _showAttachmentPicker,
-                          icon: const Icon(Icons.add_circle_outline_rounded, size: 22),
-                          color: scheme.onSurface.withValues(alpha: 0.5),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          tooltip: l10n.attach,
-                        ),
-                        const SizedBox(width: 2),
                         Expanded(
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -446,7 +458,7 @@ class _ChatInputState extends State<ChatInput> {
                               children: [
                                 if (canThink)
                                   _ToggleChip(
-                                    icon: Icons.psychology_outlined,
+                                    icon: Icons.auto_awesome_rounded,
                                     label: l10n.deepThink,
                                     active: settings.thinking,
                                     onTap: () => settings.setThinking(!settings.thinking),
@@ -454,7 +466,7 @@ class _ChatInputState extends State<ChatInput> {
                                 if (canThink && canSearch) const SizedBox(width: 6),
                                 if (canSearch)
                                   _ToggleChip(
-                                    icon: Icons.travel_explore_rounded,
+                                    icon: Icons.public_rounded,
                                     label: l10n.webSearch,
                                     active: settings.search,
                                     onTap: () => settings.setSearch(!settings.search),
@@ -463,21 +475,12 @@ class _ChatInputState extends State<ChatInput> {
                             ),
                           ),
                         ),
-                        if (canVoice)
-                          IconButton(
-                            onPressed: isStreaming ? null : _toggleRecording,
-                            icon: Icon(
-                              _recording ? Icons.mic_rounded : Icons.mic_none_rounded,
-                              size: 22,
-                            ),
-                            color: _recording
-                                ? Colors.redAccent
-                                : scheme.onSurface.withValues(alpha: 0.5),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                            tooltip: l10n.voice,
-                          ),
+                        const SizedBox(width: 4),
+                        _CircleOutlineButton(
+                          icon: Icons.add_rounded,
+                          onTap: isStreaming ? null : _showAttachmentPicker,
+                          tooltip: l10n.attach,
+                        ),
                         const SizedBox(width: 4),
                         if (isStreaming)
                           _CircleButton(
@@ -487,16 +490,36 @@ class _ChatInputState extends State<ChatInput> {
                             onTap: controller.stop,
                             tooltip: l10n.stopGenerating,
                           )
+                        else if (hasContent)
+                          _CircleButton(
+                            icon: Icons.arrow_upward_rounded,
+                            background: AppTheme.brand,
+                            foreground: Colors.white,
+                            onTap: _send,
+                            tooltip: l10n.send,
+                          )
+                        else if (canVoice)
+                          Semantics(
+                            label: l10n.voice,
+                            button: true,
+                            child: _holdToTalkGesture(
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: Icon(
+                                  Icons.mic_none_rounded,
+                                  size: 23,
+                                  color: scheme.onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                          )
                         else
                           _CircleButton(
                             icon: Icons.arrow_upward_rounded,
-                            background: canSendStyle(hasContent, isStreaming)
-                                ? AppTheme.brand
-                                : scheme.surfaceContainerHighest,
-                            foreground: canSendStyle(hasContent, isStreaming)
-                                ? Colors.white
-                                : scheme.onSurface.withValues(alpha: 0.3),
-                            onTap: canSendStyle(hasContent, isStreaming) ? _send : null,
+                            background: scheme.surfaceContainerHighest,
+                            foreground: scheme.onSurface.withValues(alpha: 0.3),
+                            onTap: null,
                             tooltip: l10n.send,
                           ),
                       ],
@@ -504,23 +527,119 @@ class _ChatInputState extends State<ChatInput> {
                   ],
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 2),
+                child: Text(
+                  l10n.aiDisclaimer,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: scheme.onSurface.withValues(alpha: 0.28),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-      ),
+        ),
+        ),
+        if (_recording)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            top: -200,
+            child: IgnorePointer(
+              child: _VoiceRecordingOverlay(
+                level: context.read<SpeechService>().micLevel,
+                willCancel: _willCancel,
+              ),
+            ),
+          ),
+      ],
     );
   }
-
-  bool canSendStyle(bool hasContent, bool isStreaming) => hasContent && !isStreaming;
 
   void _remove(Attachment attachment) {
     setState(() => _attachments.removeWhere((item) => item.id == attachment.id));
   }
 
-  String _formatDuration(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  void _openKeyboard() {
+    if (!_focus.hasFocus) {
+      _focus.requestFocus();
+    }
+    // 已经聚焦但键盘被系统收起时，requestFocus 不会重新弹出键盘，需要显式 show。
+    SystemChannels.textInput.invokeMethod<void>('TextInput.show').catchError((_) {});
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show').catchError((_) {});
+    });
+  }
+
+  /// 短按聚焦键盘，长按录音，上滑取消。
+  Widget _holdToTalkGesture(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openKeyboard,
+      onLongPressStart: (_) => _startHoldToTalk(),
+      onLongPressMoveUpdate: (details) {
+        final cancel = details.offsetFromOrigin.dy < -60;
+        if (cancel != _willCancel) {
+          setState(() => _willCancel = cancel);
+        }
+      },
+      onLongPressEnd: (_) => _endHoldToTalk(),
+      onLongPressCancel: _cancelHoldToTalk,
+      child: child,
+    );
+  }
+}
+
+class _VoiceRecordingOverlay extends StatelessWidget {
+  const _VoiceRecordingOverlay({required this.level, required this.willCancel});
+
+  final ValueListenable<double> level;
+  final bool willCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).scaffoldBackgroundColor;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            base.withValues(alpha: 0),
+            AppTheme.brand.withValues(alpha: 0.35),
+            AppTheme.brand.withValues(alpha: 0.96),
+          ],
+          stops: const [0, 0.45, 1],
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                willCancel ? '松开取消' : '松手转文字，上滑取消',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 24),
+              VoiceWave(level: level, color: Colors.white, height: 60),
+              const SizedBox(height: 44),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -641,39 +760,41 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = active
+        ? (isDark ? AppTheme.brand.withValues(alpha: 0.18) : const Color(0xFFEDF3FE))
+        : Colors.transparent;
+    final borderColor = active
+        ? (isDark ? AppTheme.brand.withValues(alpha: 0.45) : const Color(0xFFB7C8FE))
+        : AppTheme.brand.withValues(alpha: 0.2);
+    final foreground = active
+        ? (isDark ? AppTheme.brandTextDark : AppTheme.brand)
+        : (isDark
+            ? AppTheme.brandTextDark.withValues(alpha: 0.65)
+            : AppTheme.brand.withValues(alpha: 0.62));
     return Material(
-      color: active ? AppTheme.brand.withValues(alpha: 0.1) : Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
+      color: fill,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: active
-                  ? AppTheme.brand.withValues(alpha: 0.35)
-                  : scheme.outlineVariant,
-              width: 0.8,
-            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: borderColor, width: 0.9),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 14,
-                color: active ? AppTheme.brand : scheme.onSurface.withValues(alpha: 0.45),
-              ),
-              const SizedBox(width: 4),
+              Icon(icon, size: 14, color: foreground),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                  color: active ? AppTheme.brand : scheme.onSurface.withValues(alpha: 0.55),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: foreground,
                 ),
               ),
             ],
@@ -681,6 +802,42 @@ class _ToggleChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _CircleOutlineButton extends StatelessWidget {
+  const _CircleOutlineButton({
+    required this.icon,
+    this.onTap,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final child = Material(
+      color: Colors.transparent,
+      shape: CircleBorder(side: BorderSide(color: scheme.outlineVariant, width: 0.9)),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            icon,
+            size: 20,
+            color: scheme.onSurface.withValues(alpha: onTap == null ? 0.25 : 0.7),
+          ),
+        ),
+      ),
+    );
+    if (tooltip == null) return child;
+    return Tooltip(message: tooltip!, child: child);
   }
 }
 
